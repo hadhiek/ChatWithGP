@@ -1,4 +1,3 @@
-import { NextResponse } from "next-auth/next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -11,11 +10,17 @@ export async function GET() {
   }
 
   try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const availability = await prisma.availability.findMany({
       where: {
-        date: { gte: new Date() }
+        date: { gte: startOfToday }
       },
-      orderBy: { date: 'asc' }
+      orderBy: [
+        { date: 'asc' },
+        { timeSlot: 'asc' }
+      ]
     });
 
     return Response.json(availability);
@@ -32,21 +37,42 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { dates } = await req.json() as { dates: string[] };
+    const body = await req.json();
+    
+    // Support either structured slots array or simple dates array
+    let slotsToCreate: { date: Date; timeSlot: string }[] = [];
 
-    if (!dates || !Array.isArray(dates)) {
-      return Response.json({ error: "Invalid data" }, { status: 400 });
+    if (Array.isArray(body.slots)) {
+      slotsToCreate = body.slots.map((s: { date: string; timeSlot?: string }) => ({
+        date: new Date(s.date),
+        timeSlot: s.timeSlot?.trim() || "10:00 AM - 11:00 AM",
+      }));
+    } else if (Array.isArray(body.dates)) {
+      const defaultTimeSlot = body.timeSlot?.trim() || "10:00 AM - 11:00 AM";
+      slotsToCreate = body.dates.map((dateString: string) => ({
+        date: new Date(dateString),
+        timeSlot: defaultTimeSlot,
+      }));
+    } else {
+      return Response.json({ error: "Invalid slot data" }, { status: 400 });
     }
 
-    const created = await Promise.all(dates.map(dateString => {
-      const date = new Date(dateString);
-      return prisma.availability.create({
-        data: {
-          date,
-          professorId: session.user.id
-        }
-      });
-    }));
+    if (slotsToCreate.length === 0) {
+      return Response.json({ error: "No slots provided" }, { status: 400 });
+    }
+
+    const created = await Promise.all(
+      slotsToCreate.map(slot =>
+        prisma.availability.create({
+          data: {
+            date: slot.date,
+            timeSlot: slot.timeSlot,
+            professorId: session.user.id,
+            status: "AVAILABLE",
+          }
+        })
+      )
+    );
 
     return Response.json(created);
   } catch (error) {

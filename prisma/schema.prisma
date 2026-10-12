@@ -61,6 +61,7 @@ model VerificationToken {
 model Availability {
   id            String    @id @default(cuid())
   date          DateTime
+  timeSlot      String?   // e.g. "10:00 AM - 11:00 AM"
   professorId   String
   status        String    @default("AVAILABLE") // AVAILABLE, BOOKED, CANCELLED
   createdAt     DateTime  @default(now())
@@ -68,16 +69,17 @@ model Availability {
 }
 
 model AppointmentRequest {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  status        String    @default("PENDING") // PENDING, ACCEPTED, REJECTED, CANCELLED
-  reason        String?
-  professorNote String?
-  confirmedDate DateTime? // Set when ACCEPTED
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  preferences   RequestPreference[]
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  status            String    @default("PENDING") // PENDING, ACCEPTED, REJECTED, CANCELLED
+  reason            String?
+  professorNote     String?
+  confirmedDate     DateTime? // Set when ACCEPTED
+  confirmedTimeSlot String?   // Set when ACCEPTED
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  preferences       RequestPreference[]
 }
 
 model RequestPreference {

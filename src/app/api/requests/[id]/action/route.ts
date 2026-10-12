@@ -2,11 +2,20 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getServerSession(authOptions);
   
   if (!session?.user || session.user.role !== "PROFESSOR") {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  if (!id) {
+    return Response.json({ error: "Request ID is required" }, { status: 400 });
   }
 
   try {
@@ -17,11 +26,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     };
 
     if (action === "ACCEPT" && !availabilityId) {
-      return Response.json({ error: "Must select a date to confirm" }, { status: 400 });
+      return Response.json({ error: "Must select a time slot to confirm" }, { status: 400 });
     }
 
     const request = await prisma.appointmentRequest.findUnique({
-      where: { id: params.id }
+      where: { id },
+      include: {
+        preferences: {
+          include: { availability: true }
+        }
+      }
     });
 
     if (!request || request.status !== "PENDING") {
@@ -33,7 +47,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         // Double check availability is still available
         const availability = await tx.availability.findUnique({ where: { id: availabilityId! } });
         if (!availability || availability.status !== "AVAILABLE") {
-          throw new Error("Date is no longer available");
+          throw new Error("Selected time slot is no longer available");
         }
 
         // Mark availability as booked
@@ -44,17 +58,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
         // Accept request
         return tx.appointmentRequest.update({
-          where: { id: params.id },
+          where: { id },
           data: {
             status: "ACCEPTED",
             confirmedDate: availability.date,
+            confirmedTimeSlot: availability.timeSlot,
             professorNote
           }
         });
       } else {
         // Reject request
         return tx.appointmentRequest.update({
-          where: { id: params.id },
+          where: { id },
           data: {
             status: "REJECTED",
             professorNote
