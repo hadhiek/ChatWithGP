@@ -4,52 +4,74 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  
+
   if (!session?.user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { reason, preferences } = await req.json() as { 
-      reason: string; 
-      preferences: { availabilityId: string; priority: number }[] 
+    const { reason, preferences } = await req.json() as {
+      reason: string;
+      preferences: { availabilityId: string; priority: number }[];
     };
 
     if (!preferences || preferences.length === 0 || preferences.length > 3) {
-      return Response.json({ error: "Invalid preferences" }, { status: 400 });
+      return Response.json(
+        { error: "You must select 1 to 3 preferred time slots." },
+        { status: 400 }
+      );
     }
 
-    // Verify all availabilities are actually AVAILABLE
-    const availabilityIds = preferences.map(p => p.availabilityId);
+    // ── BLOCK multiple concurrent requests ──
+    // A student can only have ONE active (PENDING) request at a time.
+    const existingPending = await prisma.appointmentRequest.findFirst({
+      where: { userId: session.user.id, status: "PENDING" },
+    });
+
+    if (existingPending) {
+      return Response.json(
+        {
+          error:
+            "You already have a pending appointment request. Please wait for the professor to respond before submitting a new one.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // ── Verify all selected slots are still AVAILABLE ──
+    const availabilityIds = preferences.map((p) => p.availabilityId);
     const availabilities = await prisma.availability.findMany({
-      where: { id: { in: availabilityIds }, status: 'AVAILABLE' }
+      where: { id: { in: availabilityIds }, status: "AVAILABLE" },
     });
 
     if (availabilities.length !== availabilityIds.length) {
-      return Response.json({ error: "Some dates are no longer available" }, { status: 400 });
+      return Response.json(
+        { error: "One or more of the selected time slots are no longer available. Please refresh and try again." },
+        { status: 400 }
+      );
     }
 
-    // Use transaction to create request and preferences safely
+    // ── Create request in a transaction ──
     const request = await prisma.$transaction(async (tx) => {
-      const newReq = await tx.appointmentRequest.create({
+      return tx.appointmentRequest.create({
         data: {
           userId: session.user.id,
           reason,
-          status: 'PENDING',
+          status: "PENDING",
           preferences: {
-            create: preferences.map(p => ({
+            create: preferences.map((p) => ({
               availabilityId: p.availabilityId,
-              priority: p.priority
-            }))
-          }
+              priority: p.priority,
+            })),
+          },
         },
-        include: { preferences: true }
+        include: { preferences: true },
       });
-      return newReq;
     });
 
     return Response.json(request);
   } catch (error) {
+    console.error("[POST /api/requests]", error);
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

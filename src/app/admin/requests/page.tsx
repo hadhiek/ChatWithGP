@@ -17,7 +17,7 @@ export default async function ProfessorRequestsPage({
   const { status } = await searchParams;
   const filterStatus = status || "PENDING";
 
-  const requests = await prisma.appointmentRequest.findMany({
+  const rawRequests = await prisma.appointmentRequest.findMany({
     where: { status: filterStatus },
     include: {
       user: true,
@@ -26,8 +26,23 @@ export default async function ProfessorRequestsPage({
         orderBy: { priority: "asc" },
       },
     },
-    orderBy: { createdAt: "desc" },
   });
+
+  // Sort by the date of the #1 preferred slot (chronologically), then by submission time
+  const requests = rawRequests.sort((a, b) => {
+    const aDate = a.preferences[0]?.availability?.date
+      ? new Date(a.preferences[0].availability.date).getTime()
+      : new Date(a.createdAt).getTime();
+    const bDate = b.preferences[0]?.availability?.date
+      ? new Date(b.preferences[0].availability.date).getTime()
+      : new Date(b.createdAt).getTime();
+    if (aDate !== bDate) return aDate - bDate;
+    // Secondary sort: slot time alphabetically (e.g. "09:00 AM" < "10:00 AM")
+    const aSlot = a.preferences[0]?.availability?.timeSlot || "";
+    const bSlot = b.preferences[0]?.availability?.timeSlot || "";
+    return aSlot.localeCompare(bSlot);
+  });
+
 
   const tabs = [
     { label: "Pending", value: "PENDING" },
