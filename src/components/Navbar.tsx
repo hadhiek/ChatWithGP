@@ -24,6 +24,8 @@ export function Navbar() {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Overview" },
+    { href: "/admin#appointments", label: "All Appointments" },
+    { href: "/admin#students", label: "Students" },
   ];
 
   const userLinks = [
