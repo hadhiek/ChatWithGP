@@ -2,6 +2,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]!);
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -36,6 +42,7 @@ export async function POST(
     const request = await prisma.appointmentRequest.findUnique({
       where: { id },
       include: {
+        user: true,
         preferences: {
           include: { availability: true }
         }
@@ -73,7 +80,7 @@ export async function POST(
         }
 
         // Accept request
-        return tx.appointmentRequest.update({
+        const updated = await tx.appointmentRequest.update({
           where: { id },
           data: {
             status: "ACCEPTED",
@@ -82,6 +89,22 @@ export async function POST(
             professorNote
           }
         });
+
+        // Queue the email atomically with appointment confirmation.
+        if (request.user.email) {
+          const studentName = request.user.name || "there";
+          const date = availability.date.toLocaleDateString("en-IN", {
+            dateStyle: "full",
+            timeZone: process.env.APPOINTMENT_TIME_ZONE || "Asia/Kolkata",
+          });
+          const timeSlot = availability.timeSlot || "Please contact the Professor for the time";
+          const note = professorNote?.trim();
+          const subject = "Your Professor of Practice appointment is confirmed";
+          const text = ["Hello " + studentName + ",", "", "Your appointment with the Professor of Practice has been confirmed.", "Date: " + date, "Time: " + timeSlot, note ? "Note from the professor: " + note : "", "", "Please keep this email for your reference.", "ChatWithGP"].filter(Boolean).join("\n");
+          const html = '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Appointment confirmed</h2><p>Hello ' + escapeHtml(studentName) + ',</p><p>Your appointment with the Professor of Practice has been confirmed.</p><p><strong>Date:</strong> ' + escapeHtml(date) + '<br/><strong>Time:</strong> ' + escapeHtml(timeSlot) + '</p>' + (note ? '<p><strong>Note from the professor:</strong> ' + escapeHtml(note) + '</p>' : "") + '<p>Please keep this email for your reference.</p><p>ChatWithGP</p></div>';
+          await tx.emailOutbox.create({ data: { requestId: id, eventType: "APPOINTMENT_CONFIRMED", recipient: request.user.email, subject, html, text } });
+        }
+        return updated;
       } else {
         // Reject request
         return tx.appointmentRequest.update({

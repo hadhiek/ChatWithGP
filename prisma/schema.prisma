@@ -80,6 +80,29 @@ model AppointmentRequest {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   preferences       RequestPreference[]
+  emailOutbox       EmailOutbox[]
+}
+
+// Durable email queue: appointment changes commit even if SMTP is temporarily unavailable.
+model EmailOutbox {
+  id            String             @id @default(cuid())
+  requestId     String
+  request       AppointmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  eventType     String
+  recipient     String
+  subject       String
+  html          String
+  text          String
+  status        String             @default("PENDING") // PENDING, PROCESSING, SENT, FAILED
+  attempts      Int                @default(0)
+  nextAttemptAt DateTime           @default(now())
+  sentAt        DateTime?
+  lastError     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([requestId, eventType])
+  @@index([status, nextAttemptAt])
 }
 
 model RequestPreference {
