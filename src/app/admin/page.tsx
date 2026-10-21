@@ -86,7 +86,7 @@ export default async function AdminDashboard() {
         <StatCard label="Confirmed appointments" value={confirmedAppointments} icon={CheckCircle2} tone="bg-emerald-50 text-emerald-700" />
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <section id="appointments" className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="flex flex-col gap-1 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Upcoming appointments</h2>
@@ -164,7 +164,7 @@ export default async function AdminDashboard() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <section id="students" className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="flex flex-col gap-1 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900"><GraduationCap className="h-5 w-5 text-blue-700" />Student directory</h2>
