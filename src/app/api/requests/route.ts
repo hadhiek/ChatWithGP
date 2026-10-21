@@ -9,13 +9,24 @@ export async function POST(req: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Only regular users (students/faculty) may submit booking requests.
+  if (session.user.role === "PROFESSOR" || session.user.role === "ADMIN") {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const { reason, preferences } = await req.json() as {
       reason: string;
       preferences: { availabilityId: string; priority: number }[];
     };
 
-    if (!preferences || preferences.length === 0 || preferences.length > 3) {
+    if (
+      !Array.isArray(preferences) ||
+      preferences.length === 0 ||
+      preferences.length > 3 ||
+      new Set(preferences.map((p) => p.availabilityId)).size !== preferences.length ||
+      preferences.some((p) => !p.availabilityId || ![1, 2, 3].includes(p.priority))
+    ) {
       return Response.json(
         { error: "You must select 1 to 3 preferred time slots." },
         { status: 400 }

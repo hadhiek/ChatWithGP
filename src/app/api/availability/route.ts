@@ -61,6 +61,18 @@ export async function POST(req: Request) {
       return Response.json({ error: "No slots provided" }, { status: 400 });
     }
 
+    // Bound bulk writes and reject malformed dates/oversized slot labels.
+    if (slotsToCreate.length > 100) {
+      return Response.json({ error: "You can publish at most 100 slots per request." }, { status: 400 });
+    }
+    if (slotsToCreate.some((slot) =>
+      Number.isNaN(slot.date.getTime()) ||
+      !slot.timeSlot ||
+      slot.timeSlot.length > 80
+    )) {
+      return Response.json({ error: "One or more slots contain invalid data." }, { status: 400 });
+    }
+
     const created = await Promise.all(
       slotsToCreate.map(slot =>
         prisma.availability.create({

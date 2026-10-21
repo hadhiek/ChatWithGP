@@ -12,6 +12,13 @@ try {
   // Ignore in environments where not supported
 }
 
+function getConfiguredAdminEmails() {
+  return (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as Adapter,
   providers: [
@@ -21,28 +28,38 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
-        const isProfessor = user.email === process.env.PROFESSOR_EMAIL;
-        if (user.email && (user.email.endsWith("@nitc.ac.in") || isProfessor)) {
+        const email = user.email?.toLowerCase();
+        const isProfessor = email === process.env.PROFESSOR_EMAIL?.toLowerCase();
+        const isAdmin = !!email && getConfiguredAdminEmails().includes(email);
+
+        if (email && (email.endsWith("@nitc.ac.in") || isProfessor || isAdmin)) {
           return true;
-        } else {
-          return "/unauthorized"; // Custom error page
         }
+        return "/unauthorized";
       }
       return true;
     },
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
-        // Fetch role if not already in session. Wait, the adapter handles user role if we extend the user model.
-        // We need to fetch the user's role and add it to the session.
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
         });
-        
-        // Auto-assign admin if email matches
-        if (dbUser && dbUser.email === process.env.PROFESSOR_EMAIL && dbUser.role !== "PROFESSOR") {
+
+        const email = dbUser?.email?.toLowerCase();
+        const isAdmin = !!email && getConfiguredAdminEmails().includes(email);
+        const isProfessor = email === process.env.PROFESSOR_EMAIL?.toLowerCase();
+
+        // Configured admin accounts take precedence; the PoP account remains a professor.
+        if (dbUser && isAdmin && dbUser.role !== "ADMIN") {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: "ADMIN" },
+          });
+          session.user.role = "ADMIN";
+        } else if (dbUser && isProfessor && dbUser.role !== "PROFESSOR") {
           await prisma.user.update({
             where: { id: user.id },
             data: { role: "PROFESSOR" },
