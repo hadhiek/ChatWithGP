@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
@@ -29,6 +30,8 @@ export default async function Home() {
       </div>
     );
   }
+
+  if (session.user.role === "ADMIN") redirect("/admin");
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
