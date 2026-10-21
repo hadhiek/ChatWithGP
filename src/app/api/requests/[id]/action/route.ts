@@ -25,6 +25,10 @@ export async function POST(
       professorNote?: string;
     };
 
+    if (action !== "ACCEPT" && action !== "REJECT") {
+      return Response.json({ error: "Invalid action" }, { status: 400 });
+    }
+
     if (action === "ACCEPT" && !availabilityId) {
       return Response.json({ error: "Must select a time slot to confirm" }, { status: 400 });
     }
@@ -44,17 +48,29 @@ export async function POST(
 
     const updatedRequest = await prisma.$transaction(async (tx) => {
       if (action === "ACCEPT") {
-        // Double check availability is still available
-        const availability = await tx.availability.findUnique({ where: { id: availabilityId! } });
-        if (!availability || availability.status !== "AVAILABLE") {
+        // A professor may only confirm one of the slots the student actually requested.
+        const isPreferredSlot = request.preferences.some(
+          (preference) => preference.availabilityId === availabilityId
+        );
+        if (!isPreferredSlot) {
+          throw new Error("Selected time slot was not requested by this student");
+        }
+
+        // Atomically claim the slot. Concurrent requests cannot both book it.
+        const claimed = await tx.availability.updateMany({
+          where: { id: availabilityId!, status: "AVAILABLE" },
+          data: { status: "BOOKED" },
+        });
+        if (claimed.count !== 1) {
           throw new Error("Selected time slot is no longer available");
         }
 
-        // Mark availability as booked
-        await tx.availability.update({
+        const availability = await tx.availability.findUnique({
           where: { id: availabilityId! },
-          data: { status: "BOOKED" }
         });
+        if (!availability) {
+          throw new Error("Selected time slot no longer exists");
+        }
 
         // Accept request
         return tx.appointmentRequest.update({
@@ -79,7 +95,15 @@ export async function POST(
     });
 
     return Response.json(updatedRequest);
-  } catch (error: any) {
-    return Response.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    const isExpectedConflict =
+      message === "Selected time slot is no longer available" ||
+      message === "Selected time slot was not requested by this student" ||
+      message === "Selected time slot no longer exists";
+    return Response.json(
+      { error: message },
+      { status: isExpectedConflict ? 409 : 500 }
+    );
   }
 }
