@@ -11,7 +11,9 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isProfessor = session?.user?.role === "PROFESSOR";
+  const role = session?.user?.role;
+  const isProfessor = role === "PROFESSOR";
+  const isAdmin = role === "ADMIN";
 
   const professorLinks = [
     { href: "/", label: "Dashboard" },
@@ -20,24 +22,33 @@ export function Navbar() {
     { href: "/admin/appointments", label: "Appointments" },
   ];
 
+  const adminLinks = [
+    { href: "/admin", label: "Admin Overview" },
+  ];
+
   const userLinks = [
     { href: "/", label: "Home" },
     { href: "/availability", label: "Book Appointment" },
     { href: "/requests", label: "My Requests" },
   ];
 
-  const navLinks = session ? (isProfessor ? professorLinks : userLinks) : [];
+  const navLinks = session
+    ? isAdmin
+      ? adminLinks
+      : isProfessor
+        ? professorLinks
+        : userLinks
+    : [];
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   return (
     <nav className="border-b border-gray-200 bg-white sticky top-0 z-40">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
-          {/* Logo */}
           <Link
             href="/"
             className="text-xl font-bold text-gray-900 tracking-tight flex-shrink-0"
@@ -45,7 +56,6 @@ export function Navbar() {
             ChatWith<span className="text-blue-600">GP</span>
           </Link>
 
-          {/* Desktop Nav */}
           {session && (
             <div className="hidden md:flex items-center gap-1 ml-8">
               {navLinks.map((link) => (
@@ -64,7 +74,6 @@ export function Navbar() {
             </div>
           )}
 
-          {/* Right side */}
           <div className="flex items-center gap-3">
             {session ? (
               <>
@@ -73,9 +82,13 @@ export function Navbar() {
                   <span className="max-w-[140px] truncate">
                     {session.user?.name}
                   </span>
-                  {isProfessor && (
-                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded ml-1">
-                      PROF
+                  {(isProfessor || isAdmin) && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-1 ${
+                      isAdmin
+                        ? "bg-violet-100 text-violet-700"
+                        : "bg-blue-100 text-blue-700"
+                    }`}>
+                      {isAdmin ? "ADMIN" : "PROF"}
                     </span>
                   )}
                 </span>
@@ -86,16 +99,12 @@ export function Navbar() {
                 >
                   <LogOut className="h-5 w-5" />
                 </button>
-                {/* Mobile hamburger */}
                 <button
                   onClick={() => setMobileOpen(!mobileOpen)}
                   className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+                  aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
                 >
-                  {mobileOpen ? (
-                    <X className="h-5 w-5" />
-                  ) : (
-                    <Menu className="h-5 w-5" />
-                  )}
+                  {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </button>
               </>
             ) : (
@@ -109,7 +118,6 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Nav */}
         {mobileOpen && session && (
           <div className="md:hidden border-t border-gray-100 py-3 space-y-1">
             {navLinks.map((link) => (
