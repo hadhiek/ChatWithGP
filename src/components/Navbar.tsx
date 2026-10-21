@@ -43,8 +43,14 @@ export function Navbar() {
     : [];
 
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(`${href}/`);
+    const path = href.split("#")[0];
+
+    if (href.includes("#")) {
+      return pathname === path;
+    }
+
+    if (path === "/") return pathname === "/";
+    return pathname === path || pathname.startsWith(`${path}/`);
   };
 
   return (
